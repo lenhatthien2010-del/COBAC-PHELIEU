@@ -389,11 +389,27 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+        // AN TOÀN KHI TRIỂN KHAI GITHUB: Kiểm tra biến môi trường có sẵn không
+        const getFirebaseConfig = () => {
+            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                return JSON.parse(__firebase_config);
+            }
+            // Nếu bạn muốn chạy trên GitHub thật, bạn có thể thay giá trị null bằng 1 object config thật của Firebase
+            console.warn("Cảnh báo: Không tìm thấy cấu hình Firebase mặc định của hệ thống.");
+            return null; 
+        };
+
+        const config = getFirebaseConfig();
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-cobac';
+        
+        let db, auth;
+        
+        // Chỉ khởi tạo nếu có config
+        if (config) {
+            const app = initializeApp(config);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        }
 
         const RARITIES = {
             GODLY:     { label: 'GODLY', color: '#eab308', priority: 7 },
@@ -440,7 +456,7 @@
 
         let inventory = [];
         let balance = 0; 
-        let user = null;
+        let currentUser = null;
         let currentPage = 1;
         const itemsPerPage = 6;
         let currentSelectedItem = null;
@@ -475,10 +491,16 @@
         };
 
         const saveToCloud = async () => {
-            if(!user) return;
+            if(!db || !currentUser) {
+                // Fallback LocalStorage nếu không có Firebase
+                localStorage.setItem('cobac_phelieu_data', JSON.stringify({
+                    inventory, skills, balance, usedCodes, lastExtraBuyTime
+                }));
+                return;
+            }
             updateSyncUI('syncing');
             try {
-                const userDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'gameData');
+                const userDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'profile', 'gameData');
                 await setDoc(userDocRef, { 
                     inventory, 
                     skills, 
@@ -849,16 +871,14 @@
             let progress = 0;
             const loadingInt = setInterval(() => { progress += 2; if(progress > 98) progress = 98; bar.style.width = progress + "%"; }, 50);
 
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
-                else await signInAnonymously(auth);
-            } catch (e) { console.error("Auth Error:", e); }
-
-            onAuthStateChanged(auth, async (currUser) => {
-                if(currUser) {
-                    user = currUser;
-                    document.getElementById('user-id-display').innerText = `UID: ${user.uid}`;
-                    const userDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'gameData');
+            // Xử lý logic khởi tạo độc lập
+            const setupUser = async (userObj) => {
+                currentUser = userObj;
+                document.getElementById('user-id-display').innerText = `UID: ${currentUser.uid}`;
+                
+                // Thử tải từ Cloud nếu có Firebase
+                if (db) {
+                    const userDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'profile', 'gameData');
                     const snap = await getDoc(userDocRef);
                     if(snap.exists()) {
                         const data = snap.data();
@@ -868,24 +888,56 @@
                         usedCodes = data.usedCodes || [];
                         lastExtraBuyTime = data.lastExtraBuyTime || 0;
                     }
-                    updateStats();
                     updateSyncUI('connected');
-                    document.getElementById('btn-roll').disabled = false;
-                    clearInterval(loadingInt);
-                    bar.style.width = "100%";
-                    setTimeout(() => {
-                        document.getElementById('loading-screen').classList.add('opacity-0');
-                        setTimeout(() => {
-                            document.getElementById('loading-screen').classList.add('hidden');
-                            document.getElementById('main-menu').classList.remove('hidden');
-                            showNotif("CHÀO MỪNG ĐẾN VỚI DEV STUDIO", "👋");
-                        }, 1000);
-                    }, 500);
+                } else {
+                    // Fallback LocalStorage nếu không có Firebase (Dành cho GitHub Pages không config)
+                    const localData = localStorage.getItem('cobac_phelieu_data');
+                    if(localData) {
+                        const data = JSON.parse(localData);
+                        inventory = data.inventory || [];
+                        skills = { ...skills, ...(data.skills || {}) };
+                        balance = data.balance || 0; 
+                        usedCodes = data.usedCodes || [];
+                        lastExtraBuyTime = data.lastExtraBuyTime || 0;
+                    }
+                    updateSyncUI('offline');
                 }
-            });
+                
+                updateStats();
+                document.getElementById('btn-roll').disabled = false;
+                clearInterval(loadingInt);
+                bar.style.width = "100%";
+                setTimeout(() => {
+                    document.getElementById('loading-screen').classList.add('opacity-0');
+                    setTimeout(() => {
+                        document.getElementById('loading-screen').classList.add('hidden');
+                        document.getElementById('main-menu').classList.remove('hidden');
+                        showNotif("CHÀO MỪNG ĐẾN VỚI DEV STUDIO", "👋");
+                    }, 1000);
+                }, 500);
+            };
+
+            if (auth) {
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                    onAuthStateChanged(auth, (user) => { if(user) setupUser(user); });
+                } catch (e) { 
+                    console.error("Auth Error:", e);
+                    // Nếu lỗi Auth vẫn cho chơi offline
+                    setupUser({ uid: 'offline-player-' + Math.floor(Math.random()*1000) });
+                }
+            } else {
+                // Trường hợp hoàn toàn không có Firebase (GitHub Pages)
+                setupUser({ uid: 'guest-' + Math.floor(Math.random()*1000) });
+            }
         };
 
-        initGame();
+        // Đảm bảo DOM đã sẵn sàng
+        window.onload = initGame;
     </script>
 </body>
 </html>
