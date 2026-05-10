@@ -18,7 +18,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             console.warn("Running in local mode.");
         }
 
-        const rollSound = new Audio('Sounds/roll.mp3');
+        const rollSound = new Audio('roll.mp3');
 
         const RARITIES = {
             ULTIMATE:  { label: 'ULTIMATE', color: '#10b981', priority: 9 }, 
