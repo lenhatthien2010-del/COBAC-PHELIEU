@@ -1,4 +1,4 @@
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
@@ -915,9 +915,18 @@
                 cat.pool.forEach(el => {
                     const isOwned = owned.has(el.name);
                     const card = document.createElement('div');
-                    card.className = `relative bg-slate-900 border-2 p-3 rounded-2xl flex flex-col items-center text-center ${isOwned ? '' : 'locked-item'} ${isOwned ? getVFXClass(el.name) : ''}`;
-                    card.style.borderColor = isOwned ? RARITIES[el.rarity].color + '66' : '#222';
-                    card.innerHTML = `<div class="text-3xl mb-2">${isOwned ? el.icon : '❓'}</div><div class="text-[9px] font-black uppercase mb-1 ${isOwned ? getRarityTextClass(el.rarity) : ''}" style="${isOwned ? getRarityStyle(el.rarity) : ''}">${el.rarity}</div><div class="text-[10px] font-bold truncate w-full text-slate-400 uppercase">${isOwned ? el.name : '?? ??'}</div>`;
+                    
+                    // Không dùng CSS class .locked-item nữa để viền không bị mất màu
+                    card.className = `relative bg-slate-900 border-2 p-3 rounded-2xl flex flex-col items-center text-center ${isOwned ? getVFXClass(el.name) : 'opacity-70'}`;
+                    
+                    // Cấp viền màu tương ứng với độ hiếm (có giảm độ đậm đi một nửa nếu chưa sở hữu bằng cách thêm '66' hoặc '33' hex alpha)
+                    card.style.borderColor = RARITIES[el.rarity].color + (isOwned ? '66' : '33');
+                    
+                    card.innerHTML = `
+                        <div class="text-3xl mb-2 ${isOwned ? '' : 'grayscale brightness-50'}">${isOwned ? el.icon : '❓'}</div>
+                        <div class="text-[9px] font-black uppercase mb-1 ${getRarityTextClass(el.rarity)} ${isOwned ? '' : 'opacity-60'}" style="${getRarityStyle(el.rarity)}">${el.rarity}</div>
+                        <div class="text-[10px] font-bold truncate w-full text-slate-400 uppercase ${isOwned ? '' : 'opacity-40'}">${isOwned ? el.name : '?? ??'}</div>
+                    `;
                     grid.appendChild(card);
                 });
             });
