@@ -18,6 +18,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             console.warn("Running in local mode.");
         }
 
+        const rollSound = new Audio('Sounds/roll.mp3');
+
         const RARITIES = {
             ULTIMATE:  { label: 'ULTIMATE', color: '#10b981', priority: 9 }, 
             LIMITED:   { label: 'LIMITED', color: '#22d3ee', priority: 8 },
@@ -678,6 +680,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         const rollCard = () => {
             if(isRolling) return;
+
+                rollSound.currentTime = 0; // Đặt lại thời gian về 0 để có thể phát liên tiếp khi click nhanh
+            rollSound.play().catch(e => console.warn("Âm thanh chưa sẵn sàng:", e));
             isRolling = true;
             const luckyFactor = skills.lucky ? 0.75 : 1.0; 
             const modifiedPool = ELEMENT_POOL.map(el => ({...el, currentWeight: (['GODLY', 'MYTHIC', 'LEGENDARY', 'MYSTIC', 'ULTIMATE'].includes(el.rarity)) ? el.weight : el.weight * luckyFactor }));
